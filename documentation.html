@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Technical documentation for FOSScanner contributors and maintainers." />
+    <meta name="theme-color" content="#f5f7fb" />
+    <title>Documentation — FOSScanner</title>
+    <link rel="icon" href="assets/fosscanner-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="docs.css" />
+  </head>
+  <body class="docs-page">
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="FOSScanner home">
+        <img class="brand-logo" src="assets/fosscanner-icon.png" alt="" />
+        <span>FOSScanner</span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="index.html#features">Features</a>
+        <a href="documentation.html" aria-current="page">Documentation</a>
+        <a href="https://github.com/FOSScanner/fosscanner-app">Source</a>
+      </nav>
+      <a class="button button-small button-dark" href="https://github.com/FOSScanner/fosscanner-app">GitHub</a>
+    </header>
+
+    <main>
+      <section class="docs-hero section-shell">
+        <p class="eyebrow">Technical Documentation</p>
+        <h1>Understand the system.<br /><em>Improve the scanner.</em></h1>
+        <p>Architecture, data flow, platform boundaries, invariants, and verification guidance for FOSScanner contributors and maintainers.</p>
+      </section>
+
+      <div class="docs-layout section-shell">
+        <aside class="docs-nav" aria-label="Documentation sections">
+          <p class="eyebrow">On this page</p>
+          <a href="#scope">Scope</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#data-flow">Data flow</a>
+          <a href="#code-map">Code map</a>
+          <a href="#setup">Development setup</a>
+          <a href="#testing">Testing matrix</a>
+          <a href="#platforms">Platform boundaries</a>
+          <a href="#ocr">Android OCR bridge</a>
+          <a href="#invariants">Safety invariants</a>
+          <a href="#contributing">Contribution and release</a>
+        </aside>
+
+        <article class="docs-content">
+          <section id="scope" class="docs-section">
+            <p class="eyebrow">00 · Scope</p>
+            <h2>A native-first, privacy-first scanner</h2>
+            <p>FOSScanner is a Flutter application for capturing or importing document images, correcting their geometry, applying visual processing, retaining editable page state, and exporting a multi-page PDF. Processing is local to the device. The application has no account system, backend, analytics, or cloud storage.</p>
+            <div class="notice"><strong>Source of truth</strong><span>This page summarizes the current repository. For exact APIs, dependency versions, and behavior, consult the source tree, <code>AGENTS.md</code>, <code>CONTRIBUTING.md</code>, and the tests in <code>test/</code>.</span></div>
+          </section>
+
+          <section id="architecture" class="docs-section">
+            <p class="eyebrow">01 · Architecture</p>
+            <h2>Keep responsibilities explicit</h2>
+            <p>The application is organized around a small number of stateful screens and platform-isolated services. UI code should depend on stable service entry points rather than platform-specific implementations.</p>
+            <div class="docs-cards">
+              <div><strong>Presentation</strong><span>Material 3 screens own interaction state, busy guards, mounted checks, and page actions.</span></div>
+              <div><strong>Domain model</strong><span><code>ScannedPage</code> retains original and processed bytes plus all editing parameters.</span></div>
+              <div><strong>Processing boundary</strong><span><code>DocumentProcessor</code> exposes matching native and web APIs.</span></div>
+            </div>
+            <p>The native pipeline uses OpenCV through <code>opencv_dart</code>. The web implementation is API-compatible but intentionally does not perform native document processing because the bindings are FFI-only.</p>
+          </section>
+
+          <section id="data-flow" class="docs-section">
+            <p class="eyebrow">02 · Data flow</p>
+            <h2>Follow bytes and ownership</h2>
+            <ol class="docs-steps">
+              <li><strong>Intake:</strong> capture or import encoded image bytes. Gallery originals remain untouched.</li>
+              <li><strong>Validation:</strong> check encoded size, decoded dimensions, corner geometry, page count, and memory limits before expensive work.</li>
+              <li><strong>Editing:</strong> retain original bytes and user parameters while producing processed output for preview and export.</li>
+              <li><strong>Composition:</strong> reorder in-memory pages and generate the final PDF from processed output, not a reduced preview.</li>
+              <li><strong>Sharing:</strong> pass PDF bytes to the platform share mechanism. OS/share caches may materialize temporary copies.</li>
+              <li><strong>Cleanup:</strong> remove app-owned camera and OCR temporary files on both success and failure.</li>
+            </ol>
+            <p class="docs-code-note">Expensive native processing must remain off the UI isolate. Asynchronous screen code must preserve busy guards and verify <code>mounted</code> before updating state.</p>
+          </section>
+
+          <section id="code-map" class="docs-section">
+            <p class="eyebrow">03 · Code map</p>
+            <h2>Where to make a change</h2>
+            <div class="docs-table-wrap"><table><thead><tr><th>Area</th><th>Primary files</th><th>Contract</th></tr></thead><tbody>
+              <tr><td>App entry and theme</td><td><code>lib/main.dart</code></td><td>Material 3 light/dark configuration.</td></tr>
+              <tr><td>Page lifecycle and export</td><td><code>lib/screens/scanner_home_page.dart</code></td><td>Intake, in-memory pages, reorder, PDF, sharing, About.</td></tr>
+              <tr><td>Corner editor</td><td><code>lib/screens/corner_adjust_screen.dart</code><br /><code>lib/widgets/corner_overlay.dart</code></td><td>Corner editing, previews, and final processing.</td></tr>
+              <tr><td>Geometry and limits</td><td><code>lib/services/corner_geometry.dart</code><br /><code>image_metadata.dart</code></td><td>Ordering, convexity, finite values, warp bounds, memory checks.</td></tr>
+              <tr><td>Native processing</td><td><code>document_processor_native.dart</code></td><td>OpenCV lifecycle and filters.</td></tr>
+              <tr><td>Web processing</td><td><code>document_processor_web.dart</code></td><td>API-compatible pass-through behavior.</td></tr>
+              <tr><td>Android OCR</td><td><code>ocr_service.dart</code><br /><code>MainActivity.kt</code><br /><code>assets/tessdata/</code></td><td>MethodChannel, worker execution, Tesseract data, searchable PDF.</td></tr>
+            </tbody></table></div>
+          </section>
+
+          <section id="setup" class="docs-section">
+            <p class="eyebrow">04 · Development setup</p>
+            <h2>Use the pinned toolchain</h2>
+            <p>Use Flutter 3.44.0 from <code>.flutter-version</code>, Dart <code>&gt;=3.12.0 &lt;4.0.0</code>, and Java 17 for Android CI. Keep SDK pins consistent when deliberately upgrading the toolchain.</p>
+            <pre><code>flutter pub get
+flutter run</code></pre>
+            <p>Docker alternatives are defined in <code>docker-compose.yml</code>. The APK service uses an amd64 toolchain and may require emulation on non-amd64 hosts.</p>
+          </section>
+
+          <section id="testing" class="docs-section">
+            <p class="eyebrow">05 · Testing matrix</p>
+            <h2>Validate behavior at the right layer</h2>
+            <pre><code>dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test
+flutter build web
+flutter build apk --debug --target-platform android-arm64</code></pre>
+            <div class="docs-table-wrap"><table><thead><tr><th>Change</th><th>Required verification</th></tr></thead><tbody>
+              <tr><td>Geometry or image limits</td><td>Focused service tests plus capture, corner adjustment, filters, and large-image checks.</td></tr>
+              <tr><td>Native processing</td><td>Native tests plus Android/iOS or desktop device validation; web is not sufficient.</td></tr>
+              <tr><td>OCR or PDF export</td><td>Android emulator/device: selectable text, search, cancellation, cleanup, dimensions, and multi-page output.</td></tr>
+              <tr><td>UI or accessibility</td><td>Flutter tests plus semantic actions, keyboard/screen-reader behavior where applicable, and responsive layout checks.</td></tr>
+              <tr><td>Platform configuration</td><td>Relevant platform build and CI workflow checks; do not hand-edit generated registrants.</td></tr>
+            </tbody></table></div>
+            <p>Native service tests do not replace an emulator or physical-device check. Report environment limitations precisely instead of treating a web build as native validation.</p>
+          </section>
+
+          <section id="platforms" class="docs-section">
+            <p class="eyebrow">06 · Platform boundaries</p>
+            <h2>Preserve matching implementations</h2>
+            <ul class="docs-list">
+              <li>Android, iOS, and desktop native builds use OpenCV for edge detection, perspective correction, filters, rotation, and brightness/contrast.</li>
+              <li>The web processor is a pass-through implementation; the web target is a preview/testing target rather than native-processing validation.</li>
+              <li>Desktop camera availability comes from picker capability. Import must remain available where camera UI is unsupported.</li>
+              <li>Guard unsupported platform calls and keep web compilation green when adding native services.</li>
+              <li>Platform folders contain permissions, identifiers, runners, and build configuration; change their source configuration rather than generated output.</li>
+            </ul>
+          </section>
+
+          <section id="ocr" class="docs-section">
+            <p class="eyebrow">07 · Android OCR bridge</p>
+            <h2>Keep the Dart and Kotlin contracts synchronized</h2>
+            <p>Android searchable-PDF work spans <code>lib/services/ocr_service.dart</code>, the <code>com.fosscanner.app/ocr</code> MethodChannel in <code>MainActivity.kt</code>, Android Gradle dependencies, and the bundled English/Latin Tesseract data under <code>assets/tessdata/</code>.</p>
+            <div class="notice"><strong>Bridge contract</strong><span>Changing a method name, argument key, result shape, cancellation state, or tessdata path requires coordinated Dart, Kotlin, and regression-test updates.</span></div>
+            <ul class="docs-list"><li>Run native OCR on a worker executor and return channel results on the main thread.</li><li>Keep cancellation valid through preparation, recognition, and export; do not fall back after a confirmed cancellation.</li><li>Wait for native work to finish before deleting temporary files.</li><li>Verify searchable text, page dimensions, multi-page output, cancellation, and failure cleanup on an Android emulator or device.</li></ul>
+          </section>
+
+          <section id="invariants" class="docs-section">
+            <p class="eyebrow">08 · Safety invariants</p>
+            <h2>Protect correctness and privacy</h2>
+            <ul class="docs-list">
+              <li>Preserve original image bytes, editing parameters, and re-editability.</li>
+              <li>Reject invalid, non-finite, non-convex, incorrectly ordered, or out-of-bounds corners before warping.</li>
+              <li>Bound encoded bytes, decoded dimensions, page count, retained memory, and preview/export allocations.</li>
+              <li>Release owned OpenCV Mats, vectors, and Flutter image resources in <code>finally</code>; do not dispose borrowed contour elements.</li>
+              <li>Never log document contents or extracted text. Do not add telemetry, uploads, remote processing, or incidental network dependencies.</li>
+              <li>Do not promise immediate deletion of OS/share caches; they are managed by the platform.</li>
+            </ul>
+          </section>
+
+          <section id="contributing" class="docs-section docs-developer">
+            <p class="eyebrow">09 · Contribution and release</p>
+            <h2>Make changes easy to review</h2>
+            <p>Base new work on <code>dev</code>. Use Conventional Commits such as <code>fix:</code>, <code>feat:</code>, and <code>docs:</code>. Add regression coverage for changed behavior, avoid unrelated formatting or dependency upgrades, and preserve <code>pubspec.lock</code> when dependencies change.</p>
+            <p>Read <a href="https://github.com/FOSScanner/fosscanner-app/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a>, inspect the <a href="https://github.com/FOSScanner/fosscanner-app/actions">CI results</a>, and open an <a href="https://github.com/FOSScanner/fosscanner-app/issues">issue</a> when behavior or platform support is unclear.</p>
+            <p>Release Please manages versions and changelogs when changes are promoted to <code>main</code>. Release Android artifacts require the configured signing properties and keystore; never commit signing credentials or replace release signing with debug signing.</p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <footer class="site-footer section-shell">
+      <a class="brand" href="index.html" aria-label="FOSScanner home"><img class="brand-logo" src="assets/fosscanner-icon.png" alt="" /><span>FOSScanner</span></a>
+      <p>Privacy-first document scanning.</p>
+      <div><a href="index.html">Home</a><a href="https://github.com/FOSScanner/fosscanner-app">GitHub</a><a href="https://github.com/FOSScanner/fosscanner-app/blob/dev/LICENSE">License</a></div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+.empty-preview{height:145px;margin:28px 0 18px;border:1px dashed #bcc8d8;border-radius:12px;display:grid;place-items:center;align-content:center;gap:5px;background:#f7f9fc;text-align:center}
+.empty-preview span{font-size:1.65rem;line-height:1;color:#829bc8}
+.empty-preview strong{font-size:.65rem}
+.empty-preview small{max-width:125px;color:#8995a4;font-size:.5rem;line-height:1.35}
+.import-button{text-align:center;margin-top:11px;color:#8390a0;font-size:.54rem}
